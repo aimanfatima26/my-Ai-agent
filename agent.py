@@ -1,9 +1,34 @@
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
+
+FILE_NAME= "chat_memory.json"
+def load_data():
+    if os.path.exists(FILE_NAME):
+        if os.path.getsize(FILE_NAME)>0:
+            with pen(FILE_NAME, "r") as f:
+                return json.load(f)
+            return[]
+
+def save_data(chat_history):
+    new_memory=[]
+    for message in chat_history:
+        message_text= message.parts[0].text
+        new_memory.append({
+            "role": message.role,
+            "parts":[{
+                "text": message_text
+
+            }]
+        })
+        with open(FILE_NAME, "w") as dairy:
+            json.dump(new_memory, dairy, indent=4)
+
+
 genai.configure(api_key=api_key)
 
 instruction = """Role & Persona:
@@ -48,15 +73,21 @@ Engage: End with a short, open-ended question to encourage them to keep talking 
 
 model = genai.GenerativeModel(model_name="gemini-2.5-flash-lite", system_instruction=instruction)
 
-print("---chat startedI(type'exit or bye to stop)-----")
+memory= load_data()
+chat= model.start_chat(history=memory)
+
+print("your mental health care system"
+"---chat startedI(type'exit or bye to stop)-----")
+
 
 while True:
     user_input = input("you:")
 
     if user_input in ["exit", "bye", "quit"]:
-        print("Good Bye")
+        save_data(chat.history)
+        print("progrss save !Good Bye")
         break
 
 
-    response = model.generate_content(user_input)
+    response =chat.send_message(user_input)
     print("Agent:", response.text)
