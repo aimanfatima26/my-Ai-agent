@@ -2,92 +2,106 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 import json
+import streamlit as st
+import time
 
+# --- 1. CONFIGURATION & STYLING ---
 load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
-
-FILE_NAME= "chat_memory.json"
-def load_data():
-    if os.path.exists(FILE_NAME):
-        if os.path.getsize(FILE_NAME)>0:
-            with pen(FILE_NAME, "r") as f:
-                return json.load(f)
-            return[]
-
-def save_data(chat_history):
-    new_memory=[]
-    for message in chat_history:
-        message_text= message.parts[0].text
-        new_memory.append({
-            "role": message.role,
-            "parts":[{
-                "text": message_text
-
-            }]
-        })
-        with open(FILE_NAME, "w") as dairy:
-            json.dump(new_memory, dairy, indent=4)
-
+# api_key = os.getenv("GEMINI_API_KEY")
+if "GEMINI_API_KEY" in st.secrets:
+    api_key=st.secrets ["GEMINI_API_KEY"]
+else:
+    api_Key=st.secrets("GEMINI_API_KEY")   
 
 genai.configure(api_key=api_key)
 
+FILE_NAME = "chat_memory.json"
+
+# Page Settings
+st.set_page_config(page_title="SafeSpace - Mental Health Companion", page_icon="🌱")
+
+# Custom CSS for Attractive Chat UI
+st.markdown("""
+    <style>
+    .stApp { background-color: #f7f9fb; }
+    .stChatMessage { border-radius: 20px; margin-bottom: 10px; }
+    .stButton>button { border-radius: 20px; background-color: #e74c3c; color: white; border: none; }
+    .stButton>button:hover { background-color: #c0392b; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 2. DATA FUNCTIONS ---
+def load_data():
+    if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
+        with open(FILE_NAME, "r") as f:
+            return json.load(f)
+    return []
+
+def save_data(chat_history):
+    new_memory = []
+    for message in chat_history:
+        # History objects check
+        text_content = message.parts[0].text if hasattr(message, 'parts') else message['parts'][0]['text']
+        role = message.role if hasattr(message, 'role') else message['role']
+        
+        new_memory.append({
+            "role": role,
+            "parts": [{"text": text_content}]
+        })
+    with open(FILE_NAME, "w") as dairy:
+        json.dump(new_memory, dairy, indent=4)
+
+# --- 3. INITIALIZATION ---
 instruction = """Role & Persona:
-You are a warm, empathetic, and deeply caring Mental Health Companion. Your personality is that of a supportive, non-judgmental friend who is always there to listen. Your voice should feel like a "safe space"—gentle, reassuring, and grounded. You never lecture the user; instead, you walk beside them through their emotions.
+You are a warm, empathetic, and deeply caring Mental Health Companion... (Aapki original instruction yahan hai)"""
 
-Mission:
+model = genai.GenerativeModel(model_name="gemini-1.5-flash", system_instruction=instruction)
 
-Active Listening: Listen intently to every word. Whether the user is sharing a funny story, venting about a bad day, or expressing deep emotional pain, acknowledge their feelings first.
+# Sidebar for controls
+with st.sidebar:
+    st.title("🌱 SafeSpace AI")
+    st.info("I am here to listen and support you. You're not alone.")
+    
+    # CLEAR CHAT BUTTON
+    if st.button("🗑️ Clear Conversation"):
+        if os.path.exists(FILE_NAME):
+            os.remove(FILE_NAME)
+        st.session_state.messages = []
+        st.session_state.chat_session = model.start_chat(history=[])
+        st.rerun()
 
-Recovery & Support: Help the user find their inner strength. Offer comfort and encouragement to help them navigate their mental health journey.
+# Initialize Session State
+if "messages" not in st.session_state:
+    saved_history = load_data()
+    st.session_state.messages = saved_history
+    st.session_state.chat_session = model.start_chat(history=saved_history)
 
-Collaborative Problem Solving: Guide the user toward solutions by brainstorming together. Act as a guide, not an authority figure.
+# --- 4. CHAT INTERFACE ---
+st.title("Mindful Conversations")
 
-Continuous Engagement: Keep the conversation alive and interesting. Use a structure that makes the user feel heard and encourages them to share more.
+# Display Chat History from Session State
+for message in st.session_state.messages:
+    role = "user" if message["role"] == "user" else "assistant"
+    with st.chat_message(role):
+        st.markdown(message["parts"][0]["text"])
 
-Scope & Operational Rules:
+# User Input
+if prompt := st.chat_input("How are you feeling today?"):
+    # Show User Message
+    st.session_state.messages.append({"role": "user", "parts": [{"text": prompt}]})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-Warmth & Inclusion: Use "I" or "We" to create a sense of belonging and companionship (e.g., "I am here with you" or "We can figure this out together").
-
-Emotional Validation: Always validate the user’s feelings before offering advice. (e.g., "It makes total sense that you feel overwhelmed right now; that sounds like a lot to handle.")
-
-Language Fluidity: Respond in the same language or dialect the user uses (English, Urdu, Hindi, or Hinglish) to maintain comfort and rapport.
-
-No Medical Prescriptions: You are a companion, not a doctor. Never suggest specific medications or clinical dosages.
-
-Safety Protocols (Strict):
-
-Self-Harm/Emergency: If the user mentions self-harm, suicide, or harming others, immediately shift to a serious and protective tone. Express that their life is valuable and provide them with international or local mental health helpline resources. Urge them to contact a professional immediately.
-
-Professional Boundaries: Remind the user gently that while you are here to support them, you are an AI and not a substitute for professional clinical therapy.
-
-Response Structure (The 3-Step Flow):
-To keep the user engaged, every response should follow this pattern:
-
-Acknowledge & Validate: Start by reflecting what the user said so they know you heard them.
-
-Empathize & Share: Offer a supportive thought or a gentle perspective on their situation.
-
-Engage: End with a short, open-ended question to encourage them to keep talking (e.g., "What do you think triggered that feeling today?" or "How can I best support you in this moment?").
-
-"""
-
-model = genai.GenerativeModel(model_name="gemini-2.5-flash-lite", system_instruction=instruction)
-
-memory= load_data()
-chat= model.start_chat(history=memory)
-
-print("your mental health care system"
-"---chat startedI(type'exit or bye to stop)-----")
-
-
-while True:
-    user_input = input("you:")
-
-    if user_input in ["exit", "bye", "quit"]:
-        save_data(chat.history)
-        print("progrss save !Good Bye")
-        break
-
-
-    response =chat.send_message(user_input)
-    print("Agent:", response.text)
+    # Agent Response with Spinner
+    with st.chat_message("assistant"):
+        with st.spinner("Listening carefully..."):
+            try:
+                response = st.session_state.chat_session.send_message(prompt)
+                full_response = response.text
+                st.markdown(full_response)
+                
+                # Update Memory
+                st.session_state.messages.append({"role": "model", "parts": [{"text": full_response}]})
+                save_data(st.session_state.chat_session.history)
+            except Exception as e:
+                st.error("I'm having a little trouble connecting. Please try again.")
